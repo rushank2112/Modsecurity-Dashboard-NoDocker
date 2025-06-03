@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <title>ModSecurity Dashboard</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css">
+
+    <style>
+        @media print {
+            .no-print {
+                display: none !important;
+            }
+        }
+
+        table {
+            width: 100%;
+            table-layout: fixed;
+            font-size: 10px;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+        }
+
+        th,
+        td {
+            border: 1px solid #dee2e6;
+            padding: 4px;
+            word-wrap: break-word;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container-fluid">
+        <div class="d-flex justify-content-between align-items-center my-4 no-print">
+            <h1>ModSecurity Dashboard</h1>
+            <div>
+                <a href="/export/csv" class="btn btn-outline-primary me-2">Export CSV</a>
+                <a href="/export/pdf" class="btn btn-outline-secondary me-2">Export PDF</a>
+                <form action="/reset-logs" method="post" class="d-inline">
+                    <button type="submit" class="btn btn-outline-danger"
+                        onclick="return confirm('Are you sure you want to reset the report?')">Reset Report</button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Description Section -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="alert alert-info">
+                    <h5>Dashboard Explanation</h5>
+                    <table class="table table-sm table-bordered">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Category</th>
+                                <th>Label &amp; Color</th>
+                                <th>Status Codes</th>
+                                <th>Explanation</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>Normal Traffic</td>
+                                <td><span class="badge bg-success">✅ Normal Traffic</span></td>
+                                <td>200–399, 401, 404, etc.</td>
+                                <td>Legitimate requests that were not blocked by the WAF, including successful responses
+                                    and common client errors like 401 Unauthorized or 404 Not Found.</td>
+                            </tr>
+                            <tr>
+                                <td>Blocked Requests</td>
+                                <td><span class="badge bg-warning text-dark">⚠️ Rule Violations</span></td>
+                                <td>Usually 406, 414, etc.</td>
+                                <td>Requests blocked due to ModSecurity rule violations. These may not be clearly
+                                    malicious but were flagged for suspicious or malformed input.</td>
+                            </tr>
+                            <tr>
+                                <td>Attack Attempts</td>
+                                <td><span class="badge bg-danger">❌ Attack Attempts</span></td>
+                                <td>403</td>
+                                <td>Explicitly malicious requests identified and blocked by ModSecurity, typically
+                                    resulting in a 403 Forbidden response.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Metrics Cards -->
+        <div class="row">
+            <div class="col-md-4">
+                <a href="/logs/normal" class="text-decoration-none">
+                    <div class="card text-white bg-success mb-3">
+                        <div class="card-body">
+                            <h5 class="card-title">Normal Traffic</h5>
+                            <h2 class="card-text">{{ normal_traffic }}</h2>
+                        </div>
+                    </div>
+                </a>
+            </div>
+            <div class="col-md-4">
+                <a href="/logs/blocked" class="text-decoration-none">
+                    <div class="card text-dark bg-warning mb-3">
+                        <div class="card-body">
+                            <h5 class="card-title">Rule Violations</h5>
+                            <h2 class="card-text">{{ blocked_requests }}</h2>
+                        </div>
+                    </div>
+                </a>
+            </div>
+            <div class="col-md-4">
+                <a href="/logs/attack" class="text-decoration-none">
+                    <div class="card text-white bg-danger mb-3">
+                        <div class="card-body">
+                            <h5 class="card-title">Attack Attempts</h5>
+                            <h2 class="card-text">{{ attack_attempts }}</h2>
+                        </div>
+                    </div>
+                </a>
+            </div>
+        </div>
+
+        <!-- Recent Events Table -->
+        <div class="row mt-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">Recent Security Events</div>
+                    <div class="card-body">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th style="width: 15%;">Time</th>
+                                    <th style="width: 15%;">IP</th>
+                                    <th style="width: 10%;">Port</th>
+                                    <th style="width: 10%;">Method</th>
+                                    <th style="width: 40%;">Path</th>
+                                    <th style="width: 10%;">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for entry in recent_logs %}
+                                <tr>
+                                    <td>{{ entry.timestamp }}</td>
+                                    <td>{{ entry.ip_address }}</td>
+                                    <td>{{ entry.port }}</td>
+                                    <td>{{ entry.method }}</td>
+                                    <td style="word-wrap: break-word;">{{ entry.path }}</td>
+                                    <td>{{ entry.status }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+
+</html>

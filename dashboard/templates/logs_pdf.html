@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <title>ModSecurity Logs PDF</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            font-size: 12px;
+            margin: 20px;
+        }
+
+        h1 {
+            text-align: center;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            table-layout: fixed;
+        }
+
+        th,
+        td {
+            border: 1px solid #aaa;
+            padding: 6px;
+            text-align: left;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+        }
+
+        th:nth-child(1) {
+            width: 18%;
+        }
+
+        th:nth-child(2) {
+            width: 14%;
+        }
+
+        th:nth-child(3) {
+            width: 8%;
+        }
+
+        th:nth-child(4) {
+            width: 10%;
+        }
+
+        th:nth-child(5) {
+            width: 38%;
+        }
+
+        th:nth-child(6) {
+            width: 12%;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>{{ title }}</h1>
+    <table>
+        <thead>
+            <tr>
+                <th>Timestamp</th>
+                <th>IP</th>
+                <th>Port</th>
+                <th>Method</th>
+                <th>Path</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for entry in entries %}
+            <tr>
+                <td>{{ entry.timestamp }}</td>
+                <td>{{ entry.ip_address }}</td>
+                <td>{{ entry.port }}</td>
+                <td>{{ entry.method }}</td>
+                <td>{{ entry.path }}</td>
+                <td>{{ entry.status }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</body>
+
+</html>
