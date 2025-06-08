@@ -5,6 +5,7 @@
     <meta charset="UTF-8" />
     <title>ModSecurity Dashboard</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
     <style>
         @media print {
@@ -26,6 +27,17 @@
             border: 1px solid #dee2e6;
             padding: 4px;
             word-wrap: break-word;
+        }
+
+        .chart-container {
+            position: relative;
+            margin: auto;
+            height: 300px;
+            margin-bottom: 20px;
+        }
+
+        .chart-card {
+            margin-bottom: 20px;
         }
     </style>
 </head>
@@ -120,6 +132,43 @@
             </div>
         </div>
 
+        <!-- Charts Section -->
+        <div class="row mt-4">
+            <div class="col-md-6">
+                <div class="card chart-card">
+                    <div class="card-header">Request Status Code Distribution</div>
+                    <div class="card-body">
+                        <div class="chart-container">
+                            <canvas id="statusChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card chart-card">
+                    <div class="card-header">Request Type Distribution</div>
+                    <div class="card-body">
+                        <div class="chart-container">
+                            <canvas id="donutChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row mt-4">
+            <div class="col-md-12">
+                <div class="card chart-card">
+                    <div class="card-header">Requests by Hour of Day</div>
+                    <div class="card-body">
+                        <div class="chart-container">
+                            <canvas id="hourlyChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Recent Events Table -->
         <div class="row mt-4">
             <div class="col-12">
@@ -155,6 +204,166 @@
             </div>
         </div>
     </div>
+
+    <script>
+        // Color mapping based on your existing scheme
+        function getStatusColor(status) {
+            const statusCode = parseInt(status);
+            if (statusCode === 403) return 'rgba(220, 53, 69, 0.7)'; // Attack Attempts (red)
+            if ([406, 414].includes(statusCode)) return 'rgba(255, 193, 7, 0.7)'; // Rule Violations (yellow)
+            if (statusCode >= 200 && statusCode < 400) return 'rgba(25, 135, 84, 0.7)'; // Normal Traffic (green)
+            if ([401, 404].includes(statusCode)) return 'rgba(13, 110, 253, 0.7)'; // Other normal (blue)
+            return 'rgba(108, 117, 125, 0.7)'; // Default (gray)
+        }
+
+        document.addEventListener('DOMContentLoaded', function () {
+            try {
+                // Get the raw data from hidden elements
+                const statusData = JSON.parse(document.getElementById('chart-status-data').textContent);
+                const hourlyData = JSON.parse(document.getElementById('chart-hourly-data').textContent);
+                const metricsData = JSON.parse(document.getElementById('chart-metrics-data').textContent);
+
+                // Debugging: Check if data is loaded correctly
+                console.log('Status Data:', statusData);
+                console.log('Hourly Data:', hourlyData);
+                console.log('Metrics Data:', metricsData);
+
+                // 1. Status Code Distribution Chart
+                const statusCtx = document.getElementById('statusChart');
+                if (statusCtx) {
+                    new Chart(statusCtx.getContext('2d'), {
+                        type: 'bar',
+                        data: {
+                            labels: statusData.map(item => item.status.toString()),
+                            datasets: [{
+                                label: '', // Empty label to prevent legend item
+                                data: statusData.map(item => item.count),
+                                backgroundColor: statusData.map(item => getStatusColor(item.status)),
+                                borderColor: statusData.map(item => getStatusColor(item.status).replace('0.7', '1')),
+                                borderWidth: 1
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: {
+                                legend: {
+                                    display: false // Completely hide the legend
+                                },
+                                tooltip: {
+                                    callbacks: {
+                                        title: function (context) {
+                                            return `Status ${context[0].label}`;
+                                        },
+                                        label: function (context) {
+                                            return `${context.parsed.y} requests`;
+                                        }
+                                    }
+                                }
+                            },
+                            scales: {
+                                y: {
+                                    beginAtZero: true,
+                                    title: { display: true, text: 'Number of Requests' }
+                                },
+                                x: {
+                                    title: { display: true, text: 'Status Code' }
+                                }
+                            }
+                        }
+                    });
+                }
+
+                // 2. Hourly Distribution Chart
+                const hourlyCtx = document.getElementById('hourlyChart');
+                if (hourlyCtx) {
+                    new Chart(hourlyCtx.getContext('2d'), {
+                        type: 'line',
+                        data: {
+                            labels: hourlyData.map(item => item.hour.toString()),
+                            datasets: [{
+                                label: 'Requests',
+                                data: hourlyData.map(item => item.count),
+                                backgroundColor: 'rgba(13, 110, 253, 0.2)',
+                                borderColor: 'rgba(13, 110, 253, 1)',
+                                borderWidth: 2,
+                                tension: 0.1,
+                                fill: true
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            scales: {
+                                y: { beginAtZero: true, title: { display: true, text: 'Number of Requests' } },
+                                x: { title: { display: true, text: 'Hour of Day' } }
+                            }
+                        }
+                    });
+                }
+
+                // 3. Donut Chart - Request Type Distribution
+                const donutCtx = document.getElementById('donutChart');
+                if (donutCtx) {
+                    new Chart(donutCtx.getContext('2d'), {
+                        type: 'doughnut',
+                        data: {
+                            labels: ['Normal Traffic', 'Rule Violations', 'Attack Attempts'],
+                            datasets: [{
+                                data: [
+                                    metricsData.normal_traffic,
+                                    metricsData.blocked_requests,
+                                    metricsData.attack_attempts
+                                ],
+                                backgroundColor: [
+                                    'rgba(25, 135, 84, 0.7)',
+                                    'rgba(255, 193, 7, 0.7)',
+                                    'rgba(220, 53, 69, 0.7)'
+                                ],
+                                borderColor: [
+                                    'rgba(25, 135, 84, 1)',
+                                    'rgba(255, 193, 7, 1)',
+                                    'rgba(220, 53, 69, 1)'
+                                ],
+                                borderWidth: 1
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: {
+                                legend: { position: 'right' },
+                                tooltip: {
+                                    callbacks: {
+                                        label: function (context) {
+                                            const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                            const value = context.raw;
+                                            const percentage = Math.round((value / total) * 100);
+                                            return `${context.label}: ${value} (${percentage}%)`;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    });
+                }
+
+            } catch (error) {
+                console.error('Error initializing charts:', error);
+            }
+        });
+    </script>
+
+    <!-- Data Storage Elements -->
+    <script type="application/json" id="chart-status-data">{{ status_data|tojson|safe }}</script>
+    <script type="application/json" id="chart-hourly-data">{{ hourly_data|tojson|safe }}</script>
+    <script type="application/json" id="chart-metrics-data">
+    {
+        "normal_traffic": {{ normal_traffic|default(0) }},
+        "blocked_requests": {{ blocked_requests|default(0) }},
+        "attack_attempts": {{ attack_attempts|default(0) }}
+    }
+    </script>
 </body>
 
 </html>
