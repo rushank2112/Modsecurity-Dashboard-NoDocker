@@ -1,12 +1,24 @@
-from sqlalchemy import Column, Integer, String, DateTime
-from database import Base
-import datetime
+# models.py
 
-class LogEntry(Base):
-    __tablename__ = "log_entries"
-    id = Column(Integer, primary_key=True, index=True)
-    timestamp = Column(DateTime, default=datetime.datetime.utcnow)
-    ip_address = Column(String, index=True)
-    method = Column(String)
-    path = Column(String)
-    status = Column(Integer)
+from dataclasses import dataclass, field
+from datetime import datetime
+from typing import List, Optional
+
+
+@dataclass
+class RuleMessage:
+    rule_id: str
+    rule_msg: str
+    rule_severity: Optional[str] = None
+    rule_data: Optional[str] = None
+
+
+@dataclass
+class LogEntry:
+    timestamp: datetime
+    ip_address: str
+    port: int
+    method: str
+    path: str
+    status: int
+    rule_messages: List[RuleMessage] = field(default_factory=list)

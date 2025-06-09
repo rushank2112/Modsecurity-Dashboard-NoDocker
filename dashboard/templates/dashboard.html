@@ -79,20 +79,21 @@
                                     and common client errors like 401 Unauthorized or 404 Not Found.</td>
                             </tr>
                             <tr>
-                                <td>Blocked Requests</td>
-                                <td><span class="badge bg-warning text-dark">⚠️ Rule Violations</span></td>
+                                <td>Rule Violations</td>
+                                <td><span class="badge bg-warning text-dark">⚠️ Suspicious</span></td>
                                 <td>Usually 406, 414, etc.</td>
-                                <td>Requests blocked due to ModSecurity rule violations. These may not be clearly
-                                    malicious but were flagged for suspicious or malformed input.</td>
+                                <td>Requests flagged as suspicious or malformed input—potential probing or attempted attacks.
+                                    These may be logged or monitored without blocking, depending on rule configuration.</td>
                             </tr>
                             <tr>
-                                <td>Attack Attempts</td>
-                                <td><span class="badge bg-danger">❌ Attack Attempts</span></td>
+                                <td>Blocked Requests</td>
+                                <td><span class="badge bg-danger">⛔ Blocked</span></td>
                                 <td>403</td>
                                 <td>Explicitly malicious requests identified and blocked by ModSecurity, typically
                                     resulting in a 403 Forbidden response.</td>
                             </tr>
                         </tbody>
+                        
                     </table>
                 </div>
             </div>
@@ -184,6 +185,8 @@
                                     <th style="width: 10%;">Method</th>
                                     <th style="width: 40%;">Path</th>
                                     <th style="width: 10%;">Status</th>
+                                    <th style="width: 20%;">Rule Triggered</th>
+
                                 </tr>
                             </thead>
                             <tbody>
@@ -195,7 +198,17 @@
                                     <td>{{ entry.method }}</td>
                                     <td style="word-wrap: break-word;">{{ entry.path }}</td>
                                     <td>{{ entry.status }}</td>
+                                    <td>
+                                        {% if entry.rule_messages %}
+                                        {% for rule in entry.rule_messages %}
+                                        <div><strong>{{ rule.rule_id }}</strong>: {{ rule.rule_msg }}</div>
+                                        {% endfor %}
+                                        {% else %}
+                                        <span class="text-muted">—</span>
+                                        {% endif %}
+                                    </td>
                                 </tr>
+                                
                                 {% endfor %}
                             </tbody>
                         </table>
