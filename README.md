@@ -142,20 +142,6 @@ This setup is currently demonstrated with the **PinewoodStore** app — an e-com
 
 MIT or your preferred open-source license.
 
-Top
-<img width="1280" alt="image" src="https://github.com/user-attachments/assets/5a8cb568-b651-4d08-acf1-77a8ad205e80" />
-
-
-
-Middle
-<img width="1279" alt="image" src="https://github.com/user-attachments/assets/77725dfa-7ccd-430b-b490-d53c3729df35" />
-
-
-
-Bottom
-<img width="1277" alt="image" src="https://github.com/user-attachments/assets/c2113ff8-4890-4eb4-9472-918576cf09c2" />
-
-
-
+<img width="1280" alt="image" src="https://github.com/user-attachments/assets/cdcec05f-8a23-4580-8452-69622480672a" />
 
 

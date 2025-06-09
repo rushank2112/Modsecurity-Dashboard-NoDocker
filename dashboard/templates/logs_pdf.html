@@ -142,6 +142,27 @@
             font-size: 10px;
             color: #777;
         }
+
+        .rule-text {
+            font-size: 11px;
+            line-height: 1.3;
+        }
+
+        .rule-item {
+            margin-bottom: 4px;
+            padding-bottom: 4px;
+            border-bottom: 1px dashed #ddd;
+        }
+
+        .rule-item:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+            padding-bottom: 0;
+        }
+
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
     </style>
 </head>
 
@@ -202,23 +223,33 @@
     <table>
         <thead>
             <tr>
-                <th>Time</th>
-                <th>IP</th>
-                <th>Port</th>
-                <th>Method</th>
-                <th>Path</th>
-                <th>Status</th>
+                <th style="width: 12%">Time</th>
+                <th style="width: 12%">IP</th>
+                <th style="width: 6%">Port</th>
+                <th style="width: 8%">Method</th>
+                <th style="width: 25%">Path</th>
+                <th style="width: 7%">Status</th>
+                <th style="width: 30%">Rule Triggered</th>
             </tr>
         </thead>
         <tbody>
             {% for entry in entries %}
             <tr>
-                <td>{{ entry.timestamp.strftime('%Y-%m-%d %H:%M:%S') if entry.timestamp else 'N/A' }}</td>
+                <td>{{ entry.timestamp }}</td>
                 <td>{{ entry.ip_address }}</td>
                 <td>{{ entry.port }}</td>
                 <td>{{ entry.method }}</td>
                 <td>{{ entry.path }}</td>
                 <td>{{ entry.status }}</td>
+                <td class="rule-text">
+                    {% if entry.rule_text %}
+                    {% for rule in entry.rule_text.split('<br>') %}
+                    <div class="rule-item">{{ rule }}</div>
+                    {% endfor %}
+                    {% else %}
+                    -
+                    {% endif %}
+                </td>
             </tr>
             {% endfor %}
         </tbody>
