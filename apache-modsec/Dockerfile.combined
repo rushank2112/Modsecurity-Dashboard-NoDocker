@@ -1,0 +1,68 @@
+FROM ubuntu:22.04
+
+# Install system dependencies for both Apache/ModSecurity and Python
+RUN apt-get update && \
+    apt-get install -y \
+    # Apache/ModSecurity requirements
+    apache2 \
+    libapache2-mod-security2 \
+	nano \
+    # Python environment
+    python3.11 \
+    python3-pip \
+    python3.11-dev \
+    # WeasyPrint dependencies
+    build-essential \
+    libffi-dev \
+    libcairo2 \
+    pango1.0-tools \
+    libpango-1.0-0 \
+    libgdk-pixbuf2.0-0 \
+    libglib2.0-0 \
+    fonts-liberation \
+    fonts-dejavu-core \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Configure Apache and ModSecurity
+RUN a2enmod proxy proxy_http security2 && \
+    mkdir -p /etc/modsecurity/rules && \
+    mkdir -p /usr/share/modsecurity-crs/rules
+
+# Copy Apache and ModSecurity configuration
+COPY apache-modsec/apache-config/ports.conf /etc/apache2/
+COPY apache-modsec/apache-config/myapp.conf /etc/apache2/sites-available/
+COPY apache-modsec/apache-config/modsecurity.conf /etc/modsecurity/
+
+# Copy custom rule file
+COPY apache-modsec/custom-rules/custom_rules2.conf /usr/share/modsecurity-crs/rules/
+
+# Copy the rule toggle script
+COPY apache-modsec/modsec_rule_toggle.py /usr/local/bin/modsec_rule_toggle.py
+
+# Final Apache configuration
+RUN mv /etc/modsecurity/modsecurity.conf-recommended /etc/modsecurity/modsecurity.conf && \
+    a2ensite myapp && \
+    echo "SecRuleEngine On" >> /etc/modsecurity/modsecurity.conf
+
+# Set up Python environment
+WORKDIR /app
+COPY dashboard/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy the Python application
+COPY dashboard/ .
+
+# Ensure state directory exists
+RUN mkdir -p /var/lib/modsecurity && \
+    chmod -R 777 /var/lib/modsecurity && \
+    echo '{"disabled_rules":{}}' > /var/lib/modsecurity/rule_states.json
+
+# Make rules directory writable
+RUN chmod -R 777 /usr/share/modsecurity-crs/rules
+
+# Expose both ports
+EXPOSE 8000 8880
+
+# Command to run both services
+CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port 8000 & apache2ctl -D FOREGROUND"]

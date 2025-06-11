@@ -1,0 +1,130 @@
+/* Rule severity badges (keep as is) */
+.badge.bg-danger {
+    background-color: #dc3545;
+    color: white;
+}
+
+.badge.bg-warning {
+    background-color: #ffc107;
+    color: black;
+}
+
+.badge.bg-info {
+    background-color: #17a2b8;
+    color: white;
+}
+
+.badge.bg-secondary {
+    background-color: #6c757d;
+    color: white;
+}
+
+/* Action badges */
+.badge.bg-danger {
+    background-color: #dc3545;
+    color: white;
+}
+
+/* Block */
+.badge.bg-warning {
+    background-color: #ffc107;
+    color: black;
+}
+
+/* Monitor */
+.badge.bg-secondary {
+    background-color: #6c757d;
+    color: white;
+}
+
+/* Disabled */
+
+/* Table responsive container */
+.table-responsive {
+    max-height: 70vh;
+    overflow-y: auto;
+}
+
+/* Search/filter controls spacing */
+#ruleSearch,
+#categoryFilter {
+    margin-bottom: 15px;
+}
+
+/* Description column: better wrapping and width */
+.description-cell {
+    white-space: normal;
+    max-width: 350px;
+    word-wrap: break-word;
+    padding: 8px 12px;
+    vertical-align: top;
+}
+
+/* Table overall styling */
+table.table {
+    font-size: 1rem;
+    /* slightly larger */
+    border-collapse: separate;
+    border-spacing: 0 8px;
+    /* Adds vertical spacing between rows */
+}
+
+/* Table header */
+table.table thead th {
+    background-color: #343a40;
+    /* dark header for contrast */
+    color: #fff;
+    font-weight: 600;
+    border-bottom: none;
+    padding: 12px 15px;
+    vertical-align: middle;
+}
+
+/* Table body rows with shadow effect and rounded corners */
+table.table tbody tr {
+    background-color: #fff;
+    box-shadow: 0 1px 3px rgb(0 0 0 / 0.1);
+    border-radius: 6px;
+    transition: background-color 0.2s ease;
+}
+
+/* Hover effect for rows */
+table.table tbody tr:hover {
+    background-color: #f8f9fa;
+}
+
+/* Table cells padding and vertical alignment */
+table.table tbody td {
+    padding: 12px 15px;
+    vertical-align: middle;
+}
+
+/* Center align the "Current Action" and "Change To" columns */
+table.table tbody td:nth-child(5),
+table.table tbody td:nth-child(6) {
+    text-align: center;
+}
+
+/* Select dropdown styling to center and consistent size */
+table.table select.form-select {
+    max-width: 140px;
+    margin: 0 auto;
+}
+
+/* Scrollbar styling for the responsive container (optional) */
+.table-responsive::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+.table-responsive::-webkit-scrollbar-thumb {
+    background-color: rgba(0, 0, 0, 0.1);
+    border-radius: 4px;
+}
+
+/* Center align headers for the last two columns */
+table.table thead th:nth-child(5),
+table.table thead th:nth-child(6) {
+    text-align: center;
+    vertical-align: middle;
+}

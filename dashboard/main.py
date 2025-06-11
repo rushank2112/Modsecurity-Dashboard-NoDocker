@@ -1,5 +1,6 @@
 import os
 import re
+import glob
 import csv
 import base64
 import shutil
@@ -8,16 +9,24 @@ from collections import defaultdict
 from datetime import datetime
 from io import StringIO
 from typing import Optional, List
-
+import subprocess
 from fastapi import FastAPI, Request, Query, HTTPException
 from fastapi.responses import HTMLResponse, StreamingResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 import matplotlib.pyplot as plt
 from weasyprint import HTML
+from typing import Dict
+from pathlib import Path
+from parser import extract_rule_descriptions_from_log
 
-from models import LogEntry, RuleMessage
+from models import LogEntry, RuleMessage, ModSecRule, RuleAction
 from parser import parse_modsec_log
+from pydantic import BaseModel
+import json
+
+from modsec_rule_toggle import disable_rule, enable_rule, log, load_state, save_state
+
 
 app = FastAPI()
 templates = Jinja2Templates(directory="templates")
@@ -26,8 +35,12 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 PER_PAGE = 20
 LOG_FILE_PATH = "/var/log/apache2/modsec_audit.log"
 LOG_ENTRIES: List[LogEntry] = []
+RULE_FILES_GLOB = "/usr/share/modsecurity-crs/rules/*.conf"
+RULE_STATE_FILE = "/var/lib/modsecurity/rule_states.json"
+RULE_DIR = "/usr/share/modsecurity-crs/rules"
 
-# Removed startup event since we parse on-demand now
+# In-memory rule change queue
+PENDING_RULE_UPDATES: Dict[str, RuleAction] = {}
 
 @app.get("/", response_class=HTMLResponse)
 async def dashboard(request: Request):
@@ -378,3 +391,377 @@ def get_matplotlib_color(status_code):
     if status_code in (401, 404):
         return '#0d6efd'
     return '#6c757d'
+
+
+# === Models ===
+class UpdateActionRequest(BaseModel):
+    action: RuleAction
+
+# === API Routes ===
+@app.get("/api/rules", response_model=List[ModSecRule])
+async def get_all_rules():
+    log_msg_map = extract_rule_descriptions_from_log(LOG_FILE_PATH)
+    return load_rules_from_files(log_msg_map)
+
+@app.get("/api/rules/{rule_id}", response_model=ModSecRule)
+async def get_rule(rule_id: str):
+    return find_rule_by_id(rule_id)
+
+
+@app.post("/api/rules/{rule_id}/action")
+async def update_rule_action(rule_id: str, req: UpdateActionRequest):
+    try:
+        print(f"🔧 Received POST request to update rule {rule_id} with action: {req.action}")
+
+        update_rule_config(rule_id, req.action)
+
+        # Apply the config changes immediately
+        result = apply_config_changes()
+
+        return {
+            "message": f"✅ Rule {rule_id} successfully updated to '{req.action}'",
+            "apply_result": result
+        }
+
+    except FileNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"❌ Rule {rule_id} not found: {e}"
+        )
+
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"⚠️ Invalid action for rule {rule_id}: {e}"
+        )
+
+    except HTTPException as e:
+        # If apply_config_changes raises HTTPException, propagate it
+        raise e
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"🚨 Unexpected error while updating rule {rule_id}: {str(e)}"
+        )
+
+
+
+
+
+@app.get("/rules", response_class=HTMLResponse)
+async def rules_page(request: Request):
+    return templates.TemplateResponse("rules_management.html", {"request": request})
+
+# === Rule Management Logic ===
+
+def load_rules_from_files(log_msg_map: Dict[str, str] = None) -> List[ModSecRule]:
+    rules = []
+    rule_files = glob.glob(RULE_FILES_GLOB)
+    print(f"DEBUG: Found rule files: {rule_files}")
+
+    # Load disabled rules from persistent JSON state
+    disabled_rules_from_state = {}
+    try:
+        with open(RULE_STATE_FILE, 'r') as f:
+            state = json.load(f)
+            disabled_rules_from_state = state.get('disabled_rules', {})
+            print(f"DEBUG: Loaded disabled rules from state file: {disabled_rules_from_state}")
+    except FileNotFoundError:
+        print("DEBUG: No persistent rule state file found.")
+
+    found_rule_ids = set()
+
+    for file_path in rule_files:
+        with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+            lines = f.readlines()
+
+        active_lines = []
+        disabled_rules_in_file = []
+        in_disabled_block = False
+        current_disabled_rule = []
+
+        for line in lines:
+            stripped = line.strip()
+
+            if re.match(r'^\s*#\s*SecRule', line):
+                current_disabled_rule = [line]
+                in_disabled_block = not stripped.endswith('"')
+                if not in_disabled_block:
+                    rule_text = ''.join(current_disabled_rule)
+                    rule_id_match = re.search(r'id:(\d+)', rule_text)
+                    if rule_id_match:
+                        disabled_rules_in_file.append((rule_id_match.group(1), rule_text, file_path))
+                continue
+
+            elif in_disabled_block:
+                current_disabled_rule.append(line)
+                if stripped.endswith('"'):
+                    in_disabled_block = False
+                    rule_text = ''.join(current_disabled_rule)
+                    rule_id_match = re.search(r'id:(\d+)', rule_text)
+                    if rule_id_match:
+                        disabled_rules_in_file.append((rule_id_match.group(1), rule_text, file_path))
+                continue
+
+            else:
+                active_lines.append(line)
+
+        # Active rules
+        content = ''.join(active_lines)
+        matches = re.finditer(
+            r'SecRule\s+(.*?)\s+(.*?)\s+"(id:(\d+)[^"]*phase:\d+[^"]*)"',
+            content,
+            re.DOTALL
+        )
+
+        for match in matches:
+            rule_id = match.group(4)
+            full_rule_text = match.group(3)
+            found_rule_ids.add(rule_id)
+
+            description = log_msg_map.get(rule_id) if log_msg_map else None
+            if not description:
+                msg_match = re.search(r"msg:'([^']+)'", full_rule_text)
+                description = msg_match.group(1) if msg_match else full_rule_text
+
+            filename = Path(file_path).stem
+            category = filename.split('-')[1] if '-' in filename else "General"
+            severity_match = re.search(r"severity:\s*'?(?P<severity>\w+)'?", full_rule_text, re.IGNORECASE)
+            severity = severity_match.group("severity").upper() if severity_match else None
+
+            current_action = RuleAction.DISABLED if rule_id in disabled_rules_from_state else get_current_rule_action(rule_id)
+
+            rules.append(ModSecRule(
+                rule_id=rule_id,
+                file_name=filename,
+                description=description,
+                default_action=RuleAction.BLOCK,
+                current_action=current_action,
+                severity=severity,
+                category=category
+            ))
+
+        # Disabled rules in this file that aren't active
+        for rule_id, rule_text, file_path in disabled_rules_in_file:
+            if rule_id in found_rule_ids:
+                continue
+
+            msg_match = re.search(r"msg:'([^']+)'", rule_text)
+            description = msg_match.group(1) if msg_match else rule_text
+            filename = Path(file_path).stem
+            category = filename.split('-')[1] if '-' in filename else "General"
+
+            rules.append(ModSecRule(
+                rule_id=rule_id,
+                file_name=filename,
+                description=description,
+                default_action=RuleAction.BLOCK,
+                current_action=RuleAction.DISABLED,
+                severity=None,
+                category=category
+            ))
+            found_rule_ids.add(rule_id)
+
+    # Rules in JSON state but not found in files
+    for rule_id, filename in disabled_rules_from_state.items():
+        if rule_id in found_rule_ids:
+            continue
+
+        file_path = next((f for f in rule_files if Path(f).stem == Path(filename).stem), None)
+        description = "Disabled rule"
+        if file_path:
+            with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                content = f.read()
+            pattern = re.compile(rf'#.*?SecRule.*?id:{rule_id}.*?"', re.DOTALL)
+            match = pattern.search(content)
+            if match:
+                msg_match = re.search(r"msg:'([^']+)'", match.group(0))
+                if msg_match:
+                    description = msg_match.group(1)
+
+        category = filename.split('-')[1] if '-' in filename else "General"
+        rules.append(ModSecRule(
+            rule_id=rule_id,
+            file_name=filename,
+            description=description,
+            default_action=RuleAction.BLOCK,
+            current_action=RuleAction.DISABLED,
+            severity=None,
+            category=category
+        ))
+        found_rule_ids.add(rule_id)
+
+    print(f"DEBUG: Total rules loaded: {len(rules)}")
+    return rules
+
+
+
+
+def parse_single_rule_block(content: str, file_path: str, log_msg_map: Dict[str, str], is_commented: bool) -> List[ModSecRule]:
+    matches = re.finditer(
+        r'SecRule\s+(.*?)\s+(.*?)\s+"(id:(\d+)[^"]*phase:\d+[^"]*)"',
+        content,
+        re.DOTALL
+    )
+
+    extracted_rules = []
+    for match in matches:
+        rule_id = match.group(4)
+        full_rule_text = match.group(3)
+
+        # Determine description
+        if log_msg_map and rule_id in log_msg_map:
+            description = log_msg_map[rule_id]
+        else:
+            msg_match = re.search(r"msg:'([^']+)'", full_rule_text)
+            description = msg_match.group(1) if msg_match else full_rule_text
+
+        filename = Path(file_path).stem
+        category = filename.split('-')[1] if '-' in filename else "General"
+        severity_match = re.search(r"severity:\s*'?(?P<severity>\w+)'?", full_rule_text, re.IGNORECASE)
+        severity = severity_match.group("severity").upper() if severity_match else None
+
+        extracted_rules.append(ModSecRule(
+            rule_id=rule_id,
+            file_name=filename,
+            description=description,
+            default_action=RuleAction.BLOCK,
+            current_action="disabled" if is_commented else get_current_rule_action(rule_id),
+            severity=severity,
+            category=category
+        ))
+
+        print(f"DEBUG: Rule {rule_id} from {file_path} is {'DISABLED' if is_commented else 'ACTIVE'}")
+
+    return extracted_rules
+
+
+
+
+
+def find_rule_by_id(rule_id: str) -> ModSecRule:
+    for rule in load_rules_from_files():
+        if rule.rule_id == rule_id:
+            return rule
+    raise HTTPException(status_code=404, detail="Rule not found")
+
+def get_current_rule_action(rule_id: str) -> RuleAction:
+    return PENDING_RULE_UPDATES.get(rule_id, RuleAction.BLOCK)
+
+def update_rule_config(rule_id: str, action: RuleAction):
+    PENDING_RULE_UPDATES[rule_id] = action
+
+
+
+def init_rule_states():
+    os.makedirs(os.path.dirname(RULE_STATE_FILE), exist_ok=True)
+    if not os.path.exists(RULE_STATE_FILE):
+        with open(RULE_STATE_FILE, 'w') as f:
+            json.dump({"disabled_rules": {}}, f)
+
+def find_rule_file(rule_id):
+    rule_file = os.popen(f'grep -l "id:{rule_id}" {RULE_DIR}/*').read().strip()
+    if not rule_file:
+        raise FileNotFoundError(f"Rule {rule_id} not found")
+    return rule_file
+
+def comment_out_rule(rule_id, rule_file):
+    os.system(f'sed -i "s/\\(.*id:{rule_id}.*\\)/# \\1/" "{rule_file}"')
+
+def uncomment_rule(rule_id, rule_file):
+    os.system(f'sed -i "s/^# \\(.*id:{rule_id}.*\\)/\\1/" "{rule_file}"')
+
+def is_rule_disabled(rule_id, rule_file):
+    result = os.popen(f'grep "^#.*id:{rule_id}" "{rule_file}"').read()
+    return bool(result.strip())
+
+def is_rule_enabled(rule_id, rule_file):
+    result = os.popen(f'grep -v "^#" "{rule_file}" | grep "id:{rule_id}"').read()
+    return bool(result.strip())
+
+
+
+def apply_config_changes():
+    print("apply_config_changes called")
+    success_updates = []
+    failed_updates = []
+
+    for raw_rule_id, raw_action in PENDING_RULE_UPDATES.items():
+        rule_id = str(raw_rule_id).strip()
+        action = raw_action.strip().lower()
+
+        if action not in ("block","monitor", "disabled"):
+            print(f"⚠️ Invalid action '{action}' for rule {rule_id}")
+            failed_updates.append(rule_id)
+            continue
+
+        try:
+            if action == "disabled":
+                print(f"Disabling rule with Rule ID : {rule_id}")
+                disable_rule(rule_id)
+            elif action == "block":
+                enable_rule(rule_id)
+
+            print(f"✅ {action.title()} rule {rule_id} successfully")
+            success_updates.append(rule_id)
+
+        except Exception as e:
+            print(f"❌ Failed to {action} rule {rule_id}: {e}")
+            failed_updates.append(rule_id)
+
+    PENDING_RULE_UPDATES.clear()
+
+    if failed_updates:
+        raise HTTPException(
+            status_code=207,
+            detail={
+                "message": "Some rule changes failed",
+                "updated": success_updates,
+                "failed": failed_updates
+            }
+        )
+
+    return {"status": "success", "updated": success_updates}
+
+
+
+
+def load_disabled_rules_state():
+    try:
+        with open(RULE_STATE_FILE, "r") as f:
+            state = json.load(f)
+        return state.get("disabled_rules", {})
+    except FileNotFoundError:
+        return {}
+
+def load_rules_with_disabled_state(log_msg_map=None):
+    active_rules = load_rules_from_files(log_msg_map)
+    disabled_rules_state = load_disabled_rules_state()
+
+    # Build ModSecRule list from disabled_rules_state
+    disabled_rules = []
+    for rule_id, data in disabled_rules_state.items():
+        if isinstance(data, dict):
+            disabled_rules.append(ModSecRule(
+                rule_id=rule_id,
+                file_name=data.get("file", "unknown"),
+                description=data.get("description", "Disabled by user"),
+                default_action=RuleAction.BLOCK,
+                current_action=RuleAction.DISABLED,
+                severity=data.get("severity"),
+                category=data.get("category", "Unknown"),
+            ))
+        else:
+            # legacy fallback: just filename string
+            disabled_rules.append(ModSecRule(
+                rule_id=rule_id,
+                file_name=data,
+                description="Disabled by user",
+                default_action=RuleAction.BLOCK,
+                current_action=RuleAction.DISABLED,
+                severity=None,
+                category="Unknown",
+            ))
+
+    return active_rules + disabled_rules

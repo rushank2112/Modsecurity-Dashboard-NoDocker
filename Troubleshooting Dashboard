@@ -1,0 +1,52 @@
+To check if ModSecurity rule **941110** is disabled inside your Docker container, you typically want to:
+
+1. **Access the Docker container running your WAF (Apache + ModSecurity).**
+2. **Check if the rule is commented out or otherwise disabled in the relevant rules file(s).**
+3. Or, if your setup keeps track of disabled rules in a JSON state file inside the container, check that file.
+
+---
+
+### Step-by-step to check from Docker CLI:
+
+Assuming your container is named `waf` (or replace with your container name):
+
+```bash
+docker exec -it waf /bin/bash
+```
+
+Once inside the container shell:
+
+
+# Check if the rule is disabled by searching for 941110 in rules files (commented out)
+grep -r --include="*.conf" "941110" /usr/share/modsecurity-crs/rules | grep "^#"
+
+# Or simply grep the rule in rules files:
+grep -r --include="*.conf" "id:941110" /usr/share/modsecurity-crs/rules
+
+grep -r --include="*.conf" "id:941100" /usr/share/modsecurity-crs/rules
+```
+
+If the rule is **commented out** (lines starting with `#`), then it's disabled.
+
+---
+
+### Check your persistent rule state JSON file inside container:
+
+```bash
+cat /etc/modsecurity/persistent/rule_state.json | grep 941110 -A 5
+```
+
+If the rule ID `941110` appears there, it means it is recorded as disabled by your script.
+
+---
+
+### Quick one-liner from host (replace `waf` with your container name):
+
+```bash
+docker exec waf grep -r --include="*.conf" "941110" /usr/share/modsecurity-crs/rules | grep "^#"
+docker exec waf cat /etc/modsecurity/persistent/rule_state.json | grep 941110 -A 5
+```
+
+
+
+
