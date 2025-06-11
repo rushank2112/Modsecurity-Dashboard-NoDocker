@@ -150,7 +150,9 @@ Bottom
 <img width="1280" alt="image" src="https://github.com/user-attachments/assets/7c8f5372-70ea-4c31-84e4-4dc924d84bd6" />
 
 New Feature - WAF Rule Management Console
-![Modsecurity Frontend Dashboard with Rule Managment Feature](https://github.com/user-attachments/assets/761dd234-64d6-4590-9379-be880672838e)
+![Modsecurity Frontend Dashboard with Rule Managment Feature](https://github.com/user-attachments/assets/182dd96e-fa26-411b-81f8-6e655a5a62ed)
+
+
 
 
 
