@@ -41,8 +41,8 @@ def collect_rule_block(lines, start_index):
     return block_lines, i
 
 def rule_matches_id(block_lines, rule_id):
-    rule_text = "".join(block_lines)
-    return re.search(rf"id\s*:\s*{rule_id}\b", rule_text)
+    rule_text = "".join(block_lines).replace(" ", "")
+    return re.search(rf"id[:=]['\"]?{rule_id}['\"]?\b", rule_text)
 
 def disable_rule(rule_id):
     rule_id = str(rule_id)
@@ -73,17 +73,18 @@ def disable_rule(rule_id):
                         new_lines.extend(commented_block)
                         modified = True
                         restart_needed = True
-                        
+
                         rule_text = "".join(block_lines)
                         state['disabled_rules'][rule_id] = {
                             "file": filename,
                             "rule_text": rule_text,
                             "disabled_at": datetime.now().isoformat()
                         }
-                        i = end_index
+
+                        i = end_index + 1
                         continue
                 new_lines.extend(block_lines)
-                i = end_index
+                i = end_index + 1
             else:
                 new_lines.append(line)
                 i += 1
@@ -91,10 +92,11 @@ def disable_rule(rule_id):
         if modified:
             with open(path, "w") as f:
                 f.writelines(new_lines)
-            save_state(state)
             log(f"Disabled rule {rule_id} in {filename}")
+            break  # Stop after first match
 
     if restart_needed:
+        save_state(state)
         try:
             subprocess.run(['apachectl', 'graceful'], check=True)
             log("Apache gracefully restarted to apply changes")
@@ -102,7 +104,7 @@ def disable_rule(rule_id):
             log(f"Error restarting Apache: {e}")
             raise
     else:
-        log(f"Rule {rule_id} was already disabled or not found")
+        log(f"Rule {rule_id} not found or already disabled")
 
 def enable_rule(rule_id):
     rule_id = str(rule_id)
@@ -135,10 +137,10 @@ def enable_rule(rule_id):
                 modified = True
                 restart_needed = True
                 state['disabled_rules'].pop(rule_id, None)
-                i = end_index
+                i = end_index + 1
                 continue
             new_lines.extend(block_lines)
-            i = end_index
+            i = end_index + 1
         else:
             new_lines.append(line)
             i += 1
