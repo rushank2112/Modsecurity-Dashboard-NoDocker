@@ -1,29 +1,18 @@
 version: '3'
 services:
-  waf:
-    build: ./apache-modsec
+  waf-dashboard:
+    build:
+      context: .
+      dockerfile: apache-modsec/Dockerfile.combined
     ports:
-      - "8880:8880"
+      - "8880:8880"   # Apache port
+      - "8000:8000"   # Dashboard port
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    networks:
-      - waf-net
-    volumes:
-      - ./apache-modsec/logs:/var/log/apache2
-
-  dashboard:
-    build: ./dashboard
-    command: python -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload
-    ports:
-      - "8000:8000"
-    depends_on:
-      - waf
-    networks:
-      - waf-net
     volumes:
       - ./apache-modsec/logs:/var/log/apache2
       - ./dashboard:/app
-    working_dir: /app
+      - modsec-rules:/usr/share/modsecurity-crs/rules
     environment:
       - LOG_FILE_PATH=/var/log/apache2/modsec_audit.log
       - PYTHONUNBUFFERED=1
@@ -31,3 +20,6 @@ services:
 networks:
   waf-net:
     driver: bridge
+
+volumes:
+  modsec-rules:

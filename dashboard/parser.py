@@ -121,3 +121,26 @@ def extract_rule_messages(transaction: str) -> List[RuleMessage]:
         messages.append(rule_msg)
 
     return messages
+def extract_rule_descriptions_from_log(file_path: str) -> dict:
+    """Parse log and return a map of rule_id → msg (clean description)."""
+    rule_descriptions = {}
+    try:
+        with open(file_path, "r") as f:
+            content = f.read()
+    except Exception as e:
+        print(f"Failed to read log for rule descriptions: {e}")
+        return {}
+
+    pattern = re.compile(
+        r'\[id\s+"(\d+)"\]\s*\[msg\s+"(.*?)"\]',
+        re.DOTALL
+    )
+
+    for match in re.finditer(pattern, content):
+        rule_id = match.group(1)
+        msg = match.group(2)
+        # Only set if not already found, prefer first seen msg
+        if rule_id not in rule_descriptions:
+            rule_descriptions[rule_id] = msg
+
+    return rule_descriptions
