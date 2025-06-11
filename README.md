@@ -151,7 +151,7 @@ Bottom
 
 New Feature - WAF Rule Management Console
 
-![Modsecurity Frontend Dashboard with Rule Managment Feature](https://github.com/user-attachments/assets/e43b82c5-1396-489f-9e18-d0567c694c94)
+
 
 
 
