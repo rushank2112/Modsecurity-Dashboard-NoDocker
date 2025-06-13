@@ -152,7 +152,7 @@ Bottom
 New Feature - WAF Rule Management Console
 ![Modsecurity Frontend Dashboard with Rule Managment Feature](https://github.com/user-attachments/assets/182dd96e-fa26-411b-81f8-6e655a5a62ed)
 
-Create custom Rule form the Dashboard
+Feature Upgrade - Create custom Rule form the Dashboard
 
 <img width="1280" alt="image" src="https://github.com/user-attachments/assets/57626234-4596-4684-919d-83e3856b2e94" />
 
