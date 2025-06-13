@@ -765,3 +765,43 @@ def load_rules_with_disabled_state(log_msg_map=None):
             ))
 
     return active_rules + disabled_rules
+
+#endpoint to handle saving custom rules
+@app.post("/rules/custom")
+async def save_custom_rule(rule_data: dict):
+    custom_rules_path = os.path.join(RULE_DIR, "custom_rules4.conf")
+    
+    try:
+        # Ensure the file exists and starts with a header if newly created
+        if not os.path.exists(custom_rules_path):
+            with open(custom_rules_path, 'w') as f:
+                f.write("# Custom ModSecurity Rules\n\n")
+            print(f"[INFO] Created file: {custom_rules_path}")
+
+        # Append the custom rule
+        with open(custom_rules_path, 'a') as f:
+            f.write(f"\n{rule_data['rule_text']}\n")
+        print("[INFO] Appended rule to custom_rules4.conf")
+
+        # Reapply internal config if needed
+        apply_config_changes()
+        print("[INFO] Applied internal config changes")
+
+        # Gracefully reload Apache to apply changes
+        result = subprocess.run(["apachectl", "graceful"], capture_output=True, text=True)
+        if result.returncode != 0:
+            print(f"[ERROR] Apache reload failed: {result.stderr.strip()}")
+            raise Exception(f"Apache reload failed: {result.stderr.strip()}")
+        else:
+            print("[INFO] Apache reloaded successfully")
+
+        return {"status": "success", "message": "Custom rule added and Apache reloaded"}
+
+    except Exception as e:
+        print(f"[ERROR] Error saving custom rule: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error saving custom rule: {str(e)}"
+        )
+
+

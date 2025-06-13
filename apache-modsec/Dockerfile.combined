@@ -6,7 +6,7 @@ RUN apt-get update && \
     # Apache/ModSecurity requirements
     apache2 \
     libapache2-mod-security2 \
-	nano \
+    nano \
     # Python environment
     python3.11 \
     python3-pip \
@@ -25,7 +25,7 @@ RUN apt-get update && \
     && rm -rf /var/lib/apt/lists/*
 
 # Configure Apache and ModSecurity
-RUN a2enmod proxy proxy_http security2 && \
+RUN a2enmod proxy proxy_http security2 headers && \
     mkdir -p /etc/modsecurity/rules && \
     mkdir -p /usr/share/modsecurity-crs/rules
 
@@ -36,6 +36,7 @@ COPY apache-modsec/apache-config/modsecurity.conf /etc/modsecurity/
 
 # Copy custom rule file
 COPY apache-modsec/custom-rules/custom_rules2.conf /usr/share/modsecurity-crs/rules/
+COPY apache-modsec/custom-rules/monitor_all.conf /usr/share/modsecurity-crs/rules/
 
 # Copy the rule toggle script
 COPY apache-modsec/modsec_rule_toggle.py /usr/local/bin/modsec_rule_toggle.py

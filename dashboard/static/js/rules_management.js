@@ -1,10 +1,21 @@
 document.addEventListener("DOMContentLoaded", () => {
+    // Existing rule management elements
     const rulesTable = document.getElementById("rulesTable");
     const ruleSearch = document.getElementById("ruleSearch");
     const categoryFilter = document.getElementById("categoryFilter");
     const applyChangesBtn = document.getElementById("applyChanges");
     const paginationTop = document.getElementById("paginationTop");
     const paginationBottom = document.getElementById("paginationBottom");
+
+    // New rule creation elements
+    const newRuleForm = document.getElementById("newRuleForm");
+    const ruleTypeSelect = document.getElementById("ruleType");
+    const targetContainer = document.getElementById("targetContainer");
+    const patternContainer = document.getElementById("patternContainer");
+    const customRuleContainer = document.getElementById("customRuleContainer");
+    const generatedRuleContainer = document.getElementById("generatedRuleContainer");
+    const generatedRuleText = document.getElementById("generatedRuleText");
+    const saveRuleBtn = document.getElementById("saveRuleBtn");
 
     let rules = [];
     const changedRules = new Map();
@@ -13,6 +24,33 @@ document.addEventListener("DOMContentLoaded", () => {
     let currentPage = 1;
     let filteredRules = [];
 
+    // Initialize the page
+    async function init() {
+        setupEventListeners();
+        await loadRules();
+    }
+
+    function setupEventListeners() {
+        // Existing rule management listeners
+        ruleSearch.addEventListener("input", () => {
+            currentPage = 1;
+            renderRules();
+        });
+
+        categoryFilter.addEventListener("change", () => {
+            currentPage = 1;
+            renderRules();
+        });
+
+        applyChangesBtn.addEventListener("click", applyChanges);
+
+        // New rule creation listeners
+        ruleTypeSelect.addEventListener("change", handleRuleTypeChange);
+        newRuleForm.addEventListener("submit", handleNewRuleSubmit);
+        saveRuleBtn.addEventListener("click", saveCustomRule);
+    }
+
+    // Load existing rules from API
     async function loadRules() {
         try {
             const response = await fetch("/api/rules");
@@ -21,10 +59,11 @@ document.addEventListener("DOMContentLoaded", () => {
             currentPage = 1;
             renderRules();
         } catch (error) {
-            alert("Error loading rules: " + error.message);
+            showAlert("Error loading rules: " + error.message, "danger");
         }
     }
 
+    // Render the rules table with pagination
     function renderRules() {
         const searchTerm = (ruleSearch.value || "").toLowerCase();
         const category = categoryFilter.value || "";
@@ -90,6 +129,7 @@ document.addEventListener("DOMContentLoaded", () => {
         renderPagination(totalPages);
     }
 
+    // Handle pagination rendering
     function renderPagination(totalPages) {
         const createPageItem = (pageNum, text = null, disabled = false, active = false) => {
             const li = document.createElement("li");
@@ -135,9 +175,10 @@ document.addEventListener("DOMContentLoaded", () => {
         buildCompactPagination(paginationBottom);
     }
 
+    // Apply changes to existing rules
     async function applyChanges() {
         if (changedRules.size === 0) {
-            alert("No changes to apply.");
+            showAlert("No changes to apply.", "info");
             return;
         }
 
@@ -145,7 +186,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
         for (const [ruleId, action] of changedRules.entries()) {
             try {
-                // Send the action directly, no mapping needed
                 const response = await fetch(`/api/rules/${ruleId}/action`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
@@ -158,36 +198,177 @@ document.addEventListener("DOMContentLoaded", () => {
                     if (typeof errMsg === 'object') {
                         errMsg = JSON.stringify(errMsg);
                     }
-                    console.error(`❌ Failed to update rule ${ruleId}: ${errMsg}`);
+                    console.error(`Failed to update rule ${ruleId}: ${errMsg}`);
                     failedUpdates.push(ruleId);
                 }
             } catch (error) {
-                console.error(`❌ Exception updating rule ${ruleId}:`, error);
+                console.error(`Exception updating rule ${ruleId}:`, error);
                 failedUpdates.push(ruleId);
             }
         }
 
         if (failedUpdates.length > 0) {
-            alert(`Some rules failed to update:\n${failedUpdates.join(", ")}`);
+            showAlert(`Some rules failed to update:\n${failedUpdates.join(", ")}`, "danger");
         } else {
-            alert("✅ All changes applied successfully!");
+            showAlert("All changes applied successfully!", "success");
         }
 
         changedRules.clear();
         await loadRules();
     }
 
-    ruleSearch.addEventListener("input", () => {
-        currentPage = 1;
-        renderRules();
-    });
+    // New rule creation functions
+    function handleRuleTypeChange() {
+        const ruleType = this.value;
 
-    categoryFilter.addEventListener("change", () => {
-        currentPage = 1;
-        renderRules();
-    });
+        targetContainer.style.display = 'none';
+        patternContainer.style.display = 'none';
+        customRuleContainer.style.display = 'none';
 
-    applyChangesBtn.addEventListener("click", applyChanges);
+        if (ruleType === 'custom') {
+            customRuleContainer.style.display = 'block';
+        } else if (ruleType) {
+            targetContainer.style.display = 'block';
+            patternContainer.style.display = 'block';
 
-    loadRules();
+            // Update labels based on rule type
+            if (ruleType === 'header_block') {
+                document.getElementById('targetLabel').textContent = 'Header Name';
+                document.getElementById('patternLabel').textContent = 'Pattern to Match';
+            } else if (ruleType === 'ip_block') {
+                document.getElementById('targetLabel').textContent = 'IP Address';
+                document.getElementById('patternLabel').textContent = 'IP Pattern';
+            } else if (ruleType === 'user_agent_block') {
+                document.getElementById('targetLabel').textContent = 'User Agent';
+                document.getElementById('patternLabel').textContent = 'Pattern to Match';
+            }
+        }
+    }
+
+    function handleNewRuleSubmit(e) {
+        e.preventDefault();
+        generateRule();
+    }
+
+    function generateRule() {
+        const ruleType = ruleTypeSelect.value;
+        let ruleText = '';
+
+        if (ruleType === 'custom') {
+            ruleText = document.getElementById('customRuleText').value.trim();
+            if (!ruleText) {
+                showAlert('Please enter custom rule text', 'warning');
+                return;
+            }
+        } else {
+            const target = document.getElementById('ruleTarget').value.trim();
+            const pattern = document.getElementById('rulePattern').value.trim();
+
+            if (!target || !pattern) {
+                showAlert('Please fill in all fields', 'warning');
+                return;
+            }
+
+            // Generate new rule ID (simple implementation)
+            const newRuleId = generateNewRuleId();
+
+            // Generate rule based on type
+            switch (ruleType) {
+                case 'header_block':
+                    ruleText = `SecRule REQUEST_HEADERS:${target} "${pattern}" \\\n` +
+                        `    "id:${newRuleId},phase:1,deny,status:406,msg:'Custom rule - block ${target} header'"`;
+                    break;
+
+                case 'ip_block':
+                    ruleText = `SecRule REMOTE_ADDR "${pattern}" \\\n` +
+                        `    "id:${newRuleId},phase:1,deny,status:406,msg:'Custom rule - block IP ${pattern}'"`;
+                    break;
+
+                case 'user_agent_block':
+                    ruleText = `SecRule REQUEST_HEADERS:User-Agent "${pattern}" \\\n` +
+                        `    "id:${newRuleId},phase:1,deny,status:406,msg:'Custom rule - block User-Agent ${pattern}'"`;
+                    break;
+            }
+        }
+
+        generatedRuleText.textContent = ruleText;
+        generatedRuleContainer.style.display = 'block';
+    }
+
+    function generateNewRuleId() {
+        // Generate a new rule ID in the custom range (10010000-10019999)
+        const min = 10010000;
+        const max = 10019999;
+        return Math.floor(Math.random() * (max - min + 1)) + min;
+    }
+
+    async function saveCustomRule() {
+        const ruleText = generatedRuleText.textContent;
+
+        if (!ruleText) {
+            showAlert('No rule to save', 'warning');
+            return;
+        }
+
+        try {
+            const response = await fetch('/rules/custom', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    rule_text: ruleText,
+                    filename: 'custom_rules4.conf'
+                })
+            });
+
+            if (response.ok) {
+                showAlert('Rule saved successfully!', 'success');
+                generatedRuleContainer.style.display = 'none';
+                newRuleForm.reset();
+                // Refresh the rules list
+                await loadRules();
+            } else {
+                throw new Error('Failed to save rule');
+            }
+        } catch (error) {
+            showAlert('Error saving rule: ' + error.message, 'danger');
+        }
+    }
+
+    // Helper function to show alerts
+    function showAlert(message, type) {
+        const alertDiv = document.createElement('div');
+        alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
+        alertDiv.role = 'alert';
+        alertDiv.innerHTML = `
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        `;
+
+        // Create a temporary container for alerts
+        const alertContainer = document.getElementById('alertContainer') || createAlertContainer();
+        alertContainer.prepend(alertDiv);
+
+        // Auto-dismiss after 5 seconds
+        setTimeout(() => {
+            alertDiv.classList.remove('show');
+            setTimeout(() => alertDiv.remove(), 150);
+        }, 5000);
+    }
+
+    function createAlertContainer() {
+        const container = document.createElement('div');
+        container.id = 'alertContainer';
+        container.style.position = 'fixed';
+        container.style.top = '20px';
+        container.style.right = '20px';
+        container.style.zIndex = '1000';
+        container.style.width = '350px';
+        document.body.appendChild(container);
+        return container;
+    }
+
+    // Initialize the application
+    init();
 });
