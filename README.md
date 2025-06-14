@@ -40,8 +40,8 @@ modsec-docker/
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/yourname/modsec-docker
-cd modsec-docker
+git clone https://github.com/enochgitgamefied/Modsecurity-Dashboard.git
+cd Modsecurity-Dashboard
 ```
 
 ### 2. Adjust Apache WAF Config
