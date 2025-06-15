@@ -24,6 +24,15 @@ document.addEventListener("DOMContentLoaded", () => {
     let currentPage = 1;
     let filteredRules = [];
 
+    // Column filter values
+    const columnFilters = {
+        rule_id: '',
+        description: '',
+        category: '',
+        severity: '',
+        current_action: ''
+    };
+
     // Initialize the page
     async function init() {
         setupEventListeners();
@@ -48,6 +57,16 @@ document.addEventListener("DOMContentLoaded", () => {
         ruleTypeSelect.addEventListener("change", handleRuleTypeChange);
         newRuleForm.addEventListener("submit", handleNewRuleSubmit);
         saveRuleBtn.addEventListener("click", saveCustomRule);
+
+        // Column filter listeners
+        document.querySelectorAll('.column-filter').forEach(input => {
+            const column = input.dataset.column;
+            input.addEventListener('input', () => {
+                columnFilters[column] = input.value.toLowerCase();
+                currentPage = 1;
+                renderRules();
+            });
+        });
     }
 
     // Load existing rules from API
@@ -69,15 +88,24 @@ document.addEventListener("DOMContentLoaded", () => {
         const category = categoryFilter.value || "";
 
         filteredRules = rules.filter(rule => {
-            const description = (rule.description || "").toLowerCase();
-            const ruleId = rule.rule_id || "";
-            const categoryValue = rule.category || "";
+            // Apply main search (searches description and rule_id)
+            const matchesSearch = searchTerm === '' ||
+                (rule.description || "").toLowerCase().includes(searchTerm) ||
+                (rule.rule_id || "").toLowerCase().includes(searchTerm);
 
-            const matchesSearch =
-                description.includes(searchTerm) ||
-                ruleId.includes(searchTerm);
-            const matchesCategory = category === "" || categoryValue === category;
-            return matchesSearch && matchesCategory;
+            // Apply category filter
+            const matchesCategory = category === "" ||
+                (rule.category || "").toLowerCase() === category.toLowerCase();
+
+            // Apply column filters
+            const matchesColumnFilters = Object.entries(columnFilters).every(([column, filterValue]) => {
+                if (!filterValue) return true; // No filter for this column
+
+                const cellValue = String(rule[column] || "").toLowerCase();
+                return cellValue.includes(filterValue);
+            });
+
+            return matchesSearch && matchesCategory && matchesColumnFilters;
         });
 
         if (filteredRules.length === 0) {

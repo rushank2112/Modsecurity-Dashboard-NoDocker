@@ -456,101 +456,150 @@ async def rules_page(request: Request):
 # === Rule Management Logic ===
 
 def load_rules_from_files(log_msg_map: Dict[str, str] = None) -> List[ModSecRule]:
+    """
+    Load ModSecurity rules from files, handling both traditional and shorthand formats.
+    
+    Args:
+        log_msg_map: Optional dictionary mapping rule IDs to descriptions
+        
+    Returns:
+        List of ModSecRule objects representing all rules (both active and disabled)
+    """
     rules = []
     rule_files = glob.glob(RULE_FILES_GLOB)
     print(f"DEBUG: Found rule files: {rule_files}")
 
-    # Load disabled rules from persistent JSON state
-    disabled_rules_from_state = {}
-    try:
-        with open(RULE_STATE_FILE, 'r') as f:
-            state = json.load(f)
-            disabled_rules_from_state = state.get('disabled_rules', {})
-            print(f"DEBUG: Loaded disabled rules from state file: {disabled_rules_from_state}")
-    except FileNotFoundError:
-        print("DEBUG: No persistent rule state file found.")
-
     found_rule_ids = set()
 
     for file_path in rule_files:
+        print(f"\nDEBUG: Processing file: {file_path}")
         with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
-            lines = f.readlines()
+            content = f.read()
 
-        active_lines = []
+        # Normalize line endings and split into lines
+        lines = content.replace('\r\n', '\n').split('\n')
+        
+        active_rules_text = []
         disabled_rules_in_file = []
-        in_disabled_block = False
-        current_disabled_rule = []
+        current_rule_lines = []
+        collecting_rule = False
+        is_disabled_rule = False
+        is_shorthand_format = False
 
-        for line in lines:
+        for line_num, line in enumerate(lines, 1):
             stripped = line.strip()
-
-            if re.match(r'^\s*#\s*SecRule', line):
-                current_disabled_rule = [line]
-                in_disabled_block = not stripped.endswith('"')
-                if not in_disabled_block:
-                    rule_text = ''.join(current_disabled_rule)
-                    rule_id_match = re.search(r'id:(\d+)', rule_text)
-                    if rule_id_match:
-                        disabled_rules_in_file.append((rule_id_match.group(1), rule_text, file_path))
+            
+            # Skip empty lines
+            if not stripped:
+                if current_rule_lines:
+                    current_rule_lines.append(line)  # Preserve empty lines within rule blocks
                 continue
 
-            elif in_disabled_block:
-                current_disabled_rule.append(line)
-                if stripped.endswith('"'):
-                    in_disabled_block = False
-                    rule_text = ''.join(current_disabled_rule)
-                    rule_id_match = re.search(r'id:(\d+)', rule_text)
-                    if rule_id_match:
-                        disabled_rules_in_file.append((rule_id_match.group(1), rule_text, file_path))
+            # Handle both traditional and shorthand rule formats
+            if not collecting_rule:
+                # Check for traditional SecRule format (commented or active)
+                if re.match(r'^\s*#.*SecRule', line):
+                    print(f"DEBUG: Line {line_num}: Found commented SecRule")
+                    is_disabled_rule = True
+                    current_rule_lines = [line]
+                    collecting_rule = True
+                elif re.match(r'^\s*SecRule', line):
+                    print(f"DEBUG: Line {line_num}: Found active SecRule")
+                    is_disabled_rule = False
+                    current_rule_lines = [line]
+                    collecting_rule = True
+                # Check for shorthand rule format (starts with id:)
+                elif re.match(r'^\s*#?\s*id:\d+', line):
+                    print(f"DEBUG: Line {line_num}: Found shorthand rule format")
+                    is_shorthand_format = True
+                    is_disabled_rule = line.lstrip().startswith('#')
+                    current_rule_lines = [line]
+                    collecting_rule = True
                 continue
 
-            else:
-                active_lines.append(line)
+            # If we're collecting a rule
+            if collecting_rule:
+                current_rule_lines.append(line)
+                
+                # For traditional SecRule format, check for line continuation
+                if not is_shorthand_format:
+                    if not line.rstrip().endswith('\\'):
+                        collecting_rule = False
+                # For shorthand format, check for rule end (no comma at end)
+                else:
+                    if not line.rstrip().endswith(','):
+                        collecting_rule = False
 
-        # Active rules
-        content = ''.join(active_lines)
-        matches = re.finditer(
-            r'SecRule\s+(.*?)\s+(.*?)\s+"(id:(\d+)[^"]*phase:\d+[^"]*)"',
-            content,
-            re.DOTALL
-        )
+                # When we finish collecting a complete rule
+                if not collecting_rule:
+                    rule_block = '\n'.join(current_rule_lines)
+                    rule_id_match = re.search(r'id:(\d+)', rule_block)
+                    
+                    if rule_id_match:
+                        rule_id = rule_id_match.group(1)
+                        if is_disabled_rule:
+                            print(f"DEBUG: Found DISABLED rule {rule_id} in file {file_path}")
+                            disabled_rules_in_file.append((rule_id, rule_block, file_path))
+                        else:
+                            print(f"DEBUG: Found ACTIVE rule {rule_id} in file {file_path}")
+                            active_rules_text.append(rule_block)
+                    else:
+                        print(f"DEBUG: No ID found in rule block. Content:\n{rule_block[:200]}...")
+                    
+                    # Reset state for next rule
+                    current_rule_lines = []
+                    is_disabled_rule = False
+                    is_shorthand_format = False
 
-        for match in matches:
-            rule_id = match.group(4)
-            full_rule_text = match.group(3)
+        # Process active rules
+        for rule_text in active_rules_text:
+            rule_id_match = re.search(r'id:(\d+)', rule_text)
+            if not rule_id_match:
+                print(f"DEBUG: Active rule with no ID found. Content:\n{rule_text[:200]}...")
+                continue
+
+            rule_id = rule_id_match.group(1)
+            if rule_id in found_rule_ids:
+                print(f"DEBUG: Skipping duplicate active rule {rule_id}")
+                continue
+
             found_rule_ids.add(rule_id)
 
+            # Extract description from msg or use rule text
+            msg_match = re.search(r"msg:'([^']+)'", rule_text) or re.search(r'msg:"([^"]+)"', rule_text)
             description = log_msg_map.get(rule_id) if log_msg_map else None
-            if not description:
-                msg_match = re.search(r"msg:'([^']+)'", full_rule_text)
-                description = msg_match.group(1) if msg_match else full_rule_text
-
+            description = description or msg_match.group(1) if msg_match else rule_text
+            
             filename = Path(file_path).stem
             category = filename.split('-')[1] if '-' in filename else "General"
-            severity_match = re.search(r"severity:\s*'?(?P<severity>\w+)'?", full_rule_text, re.IGNORECASE)
+            
+            # Extract severity (supporting both single and double quotes)
+            severity_match = re.search(r"severity:\s*['\"](?P<severity>\w+)['\"]", rule_text, re.IGNORECASE)
             severity = severity_match.group("severity").upper() if severity_match else None
-
-            current_action = RuleAction.DISABLED if rule_id in disabled_rules_from_state else get_current_rule_action(rule_id)
 
             rules.append(ModSecRule(
                 rule_id=rule_id,
                 file_name=filename,
                 description=description,
                 default_action=RuleAction.BLOCK,
-                current_action=current_action,
+                current_action=RuleAction.BLOCK,
                 severity=severity,
                 category=category
             ))
 
-        # Disabled rules in this file that aren't active
+        # Process disabled rules
         for rule_id, rule_text, file_path in disabled_rules_in_file:
             if rule_id in found_rule_ids:
+                print(f"DEBUG: Skipping disabled rule {rule_id} because already loaded as active")
                 continue
 
-            msg_match = re.search(r"msg:'([^']+)'", rule_text)
+            msg_match = re.search(r"msg:'([^']+)'", rule_text) or re.search(r'msg:"([^"]+)"', rule_text)
             description = msg_match.group(1) if msg_match else rule_text
             filename = Path(file_path).stem
             category = filename.split('-')[1] if '-' in filename else "General"
+            
+            severity_match = re.search(r"severity:\s*['\"](?P<severity>\w+)['\"]", rule_text, re.IGNORECASE)
+            severity = severity_match.group("severity").upper() if severity_match else None
 
             rules.append(ModSecRule(
                 rule_id=rule_id,
@@ -558,43 +607,15 @@ def load_rules_from_files(log_msg_map: Dict[str, str] = None) -> List[ModSecRule
                 description=description,
                 default_action=RuleAction.BLOCK,
                 current_action=RuleAction.DISABLED,
-                severity=None,
+                severity=severity,
                 category=category
             ))
             found_rule_ids.add(rule_id)
 
-    # Rules in JSON state but not found in files
-    for rule_id, filename in disabled_rules_from_state.items():
-        if rule_id in found_rule_ids:
-            continue
-
-        file_path = next((f for f in rule_files if Path(f).stem == Path(filename).stem), None)
-        description = "Disabled rule"
-        if file_path:
-            with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
-                content = f.read()
-            pattern = re.compile(rf'#.*?SecRule.*?id:{rule_id}.*?"', re.DOTALL)
-            match = pattern.search(content)
-            if match:
-                msg_match = re.search(r"msg:'([^']+)'", match.group(0))
-                if msg_match:
-                    description = msg_match.group(1)
-
-        category = filename.split('-')[1] if '-' in filename else "General"
-        rules.append(ModSecRule(
-            rule_id=rule_id,
-            file_name=filename,
-            description=description,
-            default_action=RuleAction.BLOCK,
-            current_action=RuleAction.DISABLED,
-            severity=None,
-            category=category
-        ))
-        found_rule_ids.add(rule_id)
-
-    print(f"DEBUG: Total rules loaded: {len(rules)}")
+    print(f"\nDEBUG: Rule loading complete. Total rules: {len(rules)} "
+          f"(Active: {len([r for r in rules if r.current_action != RuleAction.DISABLED])}, "
+          f"Disabled: {len([r for r in rules if r.current_action == RuleAction.DISABLED])})")
     return rules
-
 
 
 

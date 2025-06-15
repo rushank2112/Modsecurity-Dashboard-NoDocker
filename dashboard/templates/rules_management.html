@@ -118,15 +118,12 @@
                                 <input type="text" id="ruleSearch" class="form-control ps-5" placeholder="Search rules..." />
                                 <i class="bi bi-search position-absolute top-50 start-0 translate-middle-y ms-3 text-muted"></i>
                             </div>
-                            
-                            
                         </div>
                         <div class="col-md-3">
                             <select id="categoryFilter" class="form-select">
                                 <option value="">All Categories</option>
                                 <option value="XSS">XSS</option>
                                 <option value="SQLi">SQL Injection</option>
-                                <!-- Add more categories -->
                             </select>
                         </div>
                         <div class="col-md-3">
@@ -138,9 +135,7 @@
 
                     <!-- Pagination Controls (Top) -->
                     <nav aria-label="Rules pagination top" class="mb-2">
-                        <ul class="pagination justify-content-center" id="paginationTop">
-                            <!-- Dynamically populated by JS -->
-                        </ul>
+                        <ul class="pagination justify-content-center" id="paginationTop"></ul>
                     </nav>
 
                     <div class="table-responsive">
@@ -154,18 +149,22 @@
                                     <th width="15%">Current Action</th>
                                     <th width="15%">Change To</th>
                                 </tr>
+                                <tr>
+                                    <th><input type="text" class="form-control form-control-sm column-filter" data-column="rule_id"></th>
+                                    <th><input type="text" class="form-control form-control-sm column-filter" data-column="description"></th>
+                                    <th><input type="text" class="form-control form-control-sm column-filter" data-column="category"></th>
+                                    <th><input type="text" class="form-control form-control-sm column-filter" data-column="severity"></th>
+                                    <th><input type="text" class="form-control form-control-sm column-filter" data-column="current_action"></th>
+                                    <th></th>
+                                </tr>
                             </thead>
-                            <tbody id="rulesTable">
-                                <!-- Dynamically populated -->
-                            </tbody>
+                            <tbody id="rulesTable"></tbody>
                         </table>
                     </div>
 
                     <!-- Pagination Controls (Bottom) -->
                     <nav aria-label="Rules pagination bottom" class="mt-2">
-                        <ul class="pagination justify-content-center" id="paginationBottom">
-                            <!-- Dynamically populated by JS -->
-                        </ul>
+                        <ul class="pagination justify-content-center" id="paginationBottom"></ul>
                     </nav>
                 </div>
             </div>
@@ -174,7 +173,6 @@
 
     <!-- Bootstrap JS Bundle -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-
     <!-- Your rule management JS -->
     <script src="/static/js/rules_management.js"></script>
 </body>
