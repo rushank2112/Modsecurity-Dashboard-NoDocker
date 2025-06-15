@@ -25,9 +25,9 @@ def parse_modsec_log(file_path: str) -> List[LogEntry]:
     log_entries = []
 
     for t in transactions:
-        # Extract timestamp, IP and port from Section A
+        # Extract timestamp, source IP/port, and dest IP/port from Section A
         section_a = re.search(
-            r'^\[(.*?)\].*?(\d{1,3}(?:\.\d{1,3}){3}) (\d+)',
+            r'^\[(.*?)\]\s+\S+\s+(\d{1,3}(?:\.\d{1,3}){3})\s+(\d+)\s+(\d{1,3}(?:\.\d{1,3}){3})\s+(\d+)',
             t,
             re.MULTILINE
         )
@@ -36,8 +36,10 @@ def parse_modsec_log(file_path: str) -> List[LogEntry]:
             continue
 
         timestamp_str = section_a.group(1).split()[0]
-        ip = section_a.group(2)
-        port = int(section_a.group(3))
+        source_ip = section_a.group(2)
+        source_port = int(section_a.group(3))
+        dest_ip = section_a.group(4)
+        dest_port = int(section_a.group(5))  # ✅ Use this for correct port info
 
         try:
             timestamp = parse_timestamp(timestamp_str)
@@ -51,8 +53,8 @@ def parse_modsec_log(file_path: str) -> List[LogEntry]:
 
         log_entry = LogEntry(
             timestamp=timestamp,
-            ip_address=ip,
-            port=port,
+            ip_address=source_ip,  # You can change to dest_ip if needed
+            port=dest_port,        # ✅ Correct destination port (e.g., 8880, 8881)
             method=method or "",
             path=path or "",
             status=status or 0,
@@ -121,6 +123,8 @@ def extract_rule_messages(transaction: str) -> List[RuleMessage]:
         messages.append(rule_msg)
 
     return messages
+
+
 def extract_rule_descriptions_from_log(file_path: str) -> dict:
     """Parse log and return a map of rule_id → msg (clean description)."""
     rule_descriptions = {}
@@ -139,7 +143,6 @@ def extract_rule_descriptions_from_log(file_path: str) -> dict:
     for match in re.finditer(pattern, content):
         rule_id = match.group(1)
         msg = match.group(2)
-        # Only set if not already found, prefer first seen msg
         if rule_id not in rule_descriptions:
             rule_descriptions[rule_id] = msg
 
