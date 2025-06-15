@@ -18,7 +18,7 @@ Once inside the container shell:
 
 
 # Check if the rule is disabled by searching for 941110 in rules files (commented out)
-grep -r --include="*.conf" "941110" /usr/share/modsecurity-crs/rules | grep "^#"
+grep -r --include="*.conf" "932100" /usr/share/modsecurity-crs/rules | grep "^#"
 
 # Or simply grep the rule in rules files:
 grep -r --include="*.conf" "id:941110" /usr/share/modsecurity-crs/rules
@@ -47,6 +47,164 @@ docker exec waf grep -r --include="*.conf" "941110" /usr/share/modsecurity-crs/r
 docker exec waf cat /etc/modsecurity/persistent/rule_state.json | grep 941110 -A 5
 ```
 
+##############################################################################################################################################################################
+
+
+Here’s a concise note you can add to your **README.md** explaining the configuration difference between **running the WAF and application on the same machine vs different machines**:
+
+---
+
+## 🔄 WAF Deployment: Same Machine vs. Different Machine
+
+### 🖥️ When App and WAF Run on the **Same Machine**
+
+* Apache (`myapp.conf`) uses:
+
+  ```apache
+  ProxyPass / http://host.docker.internal:8088/
+  ProxyPassReverse / http://host.docker.internal:8088/
+  ```
+* `host.docker.internal` allows the WAF container to reach the app running on the host system.
+* Requires Docker to support `host.docker.internal` (works on Docker Desktop or custom Linux DNS bridge setups).
+* **Networking is simpler**, but real client IPs may be obscured (shown as `172.x.x.x`) unless extra headers and logging tricks are used.
+
+---
+
+### 🌐 When App and WAF Run on **Different Machines**
+
+* Apache (`myapp.conf`) must use the **actual IP or hostname** of the remote app:
+
+  ```apache
+  ProxyPass / http://192.168.1.20:8088/
+  ProxyPassReverse / http://192.168.1.20:8088/
+  ```
+* `192.168.1.20` is the IP address of the remote app server on the same LAN.
+* WAF can now **see real client IPs directly** and should forward them to the backend app via:
+
+  ```apache
+  RequestHeader set X-Forwarded-For %{REMOTE_ADDR}e env=REMOTE_ADDR
+  ```
+* The backend application must trust `X-Forwarded-For` to log/display the true client IP.
+
+---
+
+### 🔒 Other Considerations
+
+* Ensure **firewalls** and **host networking** allow traffic between WAF and app machines.
+* If the backend app is HTTPS, add `SSLProxyEngine on` in Apache and adjust `ProxyPass` to `https://...`.
+
+---
+
+######################################################################################################################################################################################################
+
+
+---
+
+### ✅ If App and WAF Are on the **Same Machine**
+
+Your current config **is correct**:
+
+```yaml
+extra_hosts:
+  - "host.docker.internal:host-gateway"
+```
+
+* This maps `host.docker.internal` inside the container to the host’s IP, allowing the WAF (inside Docker) to forward traffic to the app running on the **host**.
+* Works only if the backend app is hosted **on the same physical machine**, outside the container.
+
+---
+
+### 🌐 If App and WAF Are on **Different Machines**
+
+You **should remove** this line:
+
+```yaml
+extra_hosts:
+  - "host.docker.internal:host-gateway"
+```
+
+And instead, update `myapp.conf` to point to the **real IP** of the remote app:
+
+```apache
+ProxyPass / http://192.168.1.20:8088/
+ProxyPassReverse / http://192.168.1.20:8088/
+```
+
+**Other changes to consider**:
+
+* If your backend is on HTTPS, you'll need `SSLProxyEngine on` and update the URLs to `https://...`.
+* Ensure port 8088 is accessible on the remote app machine from the WAF host.
+
+---
+
+### 🧠 Summary of Changes Based on Setup
+
+| Scenario                  | `extra_hosts`            | `ProxyPass` target                  |
+| ------------------------- | ------------------------ | ----------------------------------- |
+| Same machine (hosted app) | ✅ `host.docker.internal` | `http://host.docker.internal:8088/` |
+| Different machines        | ❌ *remove* `extra_hosts` from your docker-compose | `http://<remote-app-ip>:8088/`      |
 
 
 
+
+Here's a concise note that explains **what to remove from `docker-compose.yml`** when using `network_mode: host`, including the reasons why and how it affects configuration:
+
+---
+
+## 🧾 **Note: What to Remove When Using `network_mode: host` in Docker Compose**
+
+When switching a service to use `network_mode: host`, you must remove the following:
+
+---
+
+### 🔹 1. `ports:` Section
+
+**Why remove it?**
+
+* Port bindings (e.g., `- "8000:8000"`) are **only needed** when Docker is using a bridge network.
+* In `host` mode, services inside the container **bind directly to host ports**.
+
+**Remove this:**
+
+```yaml
+ports:
+  - "8000:8000"
+  - "8880:8880"
+```
+
+> ✅ Your application should instead bind to the correct port (e.g., 8000 or 8880) inside the container, and it will be available directly on the host.
+
+---
+
+### 🔹 2. `extra_hosts:` Section (if present)
+
+**Why remove it?**
+
+* `extra_hosts` is used to inject custom hostname-to-IP mappings inside the container.
+* In `host` mode, the container already uses the **host's DNS and network**, so most `extra_hosts` entries are **redundant or can cause conflicts**.
+
+**Example to remove:**
+
+```yaml
+extra_hosts:
+  - "host.docker.internal:host-gateway"
+```
+
+> ✅ If you're using this to reach the host from the container, it's no longer necessary in `host` mode — just use `localhost` or the actual interface IP.
+
+---
+
+### ✅ Summary of Changes When Using `network_mode: host`
+
+| Component      | Remove?      | Reason                                          |
+| -------------- | ------------ | ----------------------------------------------- |
+| `ports:`       | ✅ Yes        | Host mode bypasses Docker’s port mapping        |
+| `extra_hosts:` | ✅ Yes        | Host network already shares DNS and IP          |
+| `networks:`    | ✅ Optional\* | No need to declare custom bridge networks       |
+| `depends_on:`  | ❌ No         | Still works and needed if you have dependencies |
+
+\*If your service is the only one using `host` mode, you can also remove custom `networks` declarations unless other services use them.
+
+
+
+###############################################################################################################################################################
