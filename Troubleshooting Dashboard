@@ -49,9 +49,6 @@ docker exec waf cat /etc/modsecurity/persistent/rule_state.json | grep 941110 -A
 
 ##############################################################################################################################################################################
 
-
-Here’s a concise note you can add to your **README.md** explaining the configuration difference between **running the WAF and application on the same machine vs different machines**:
-
 ---
 
 ## 🔄 WAF Deployment: Same Machine vs. Different Machine
