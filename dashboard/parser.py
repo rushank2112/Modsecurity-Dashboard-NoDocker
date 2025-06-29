@@ -1,34 +1,44 @@
-# parser.py
-
+import os
 import re
+import gzip
 from datetime import datetime
 from typing import List, Optional
 from models import LogEntry, RuleMessage
 
+UNPARSED_LOG_PATH = "/var/log/modsec/unparsed_entries.log"
 
 def parse_modsec_log(file_path: str) -> List[LogEntry]:
     """
     Parse ModSecurity audit log file and extract log entries with rule messages.
-    Returns a list of LogEntry objects.
+    Log binary/compressed or undecodable entries to a separate file.
     """
     try:
-        with open(file_path, "r") as file:
-            content = file.read()
+        with open(file_path, "rb") as file:
+            binary_content = file.read()
     except (IOError, FileNotFoundError) as e:
         print(f"Error reading log file: {e}")
         return []
 
-    # Split on audit log transaction start lines (section A)
-    transactions = re.split(r'--[a-f0-9]+-A--\n', content)
-    transactions = [t.strip() for t in transactions if t.strip()]
+    raw_transactions = re.split(rb'--[a-f0-9]+-A--\n', binary_content)
+    raw_transactions = [t.strip() for t in raw_transactions if t.strip()]
 
     log_entries = []
+    skipped_entries = []
 
-    for t in transactions:
-        # Extract timestamp, source IP/port, and dest IP/port from Section A
+    for t in raw_transactions:
+        if b'\x1f\x8b' in t:
+            skipped_entries.append(t)
+            continue
+
+        try:
+            transaction = t.decode('utf-8')
+        except UnicodeDecodeError:
+            skipped_entries.append(t)
+            continue
+
         section_a = re.search(
             r'^\[(.*?)\]\s+\S+\s+(\d{1,3}(?:\.\d{1,3}){3})\s+(\d+)\s+(\d{1,3}(?:\.\d{1,3}){3})\s+(\d+)',
-            t,
+            transaction,
             re.MULTILINE
         )
 
@@ -39,7 +49,7 @@ def parse_modsec_log(file_path: str) -> List[LogEntry]:
         source_ip = section_a.group(2)
         source_port = int(section_a.group(3))
         dest_ip = section_a.group(4)
-        dest_port = int(section_a.group(5))  # ✅ Use this for correct port info
+        dest_port = int(section_a.group(5))
 
         try:
             timestamp = parse_timestamp(timestamp_str)
@@ -47,20 +57,31 @@ def parse_modsec_log(file_path: str) -> List[LogEntry]:
             print(f"Invalid timestamp format: {timestamp_str}")
             continue
 
-        method, path = extract_request_details(t)
-        status = extract_status_code(t)
-        rule_messages = extract_rule_messages(t)
+        method, path = extract_request_details(transaction)
+        status = extract_status_code(transaction)
+        rule_messages = extract_rule_messages(transaction)
 
         log_entry = LogEntry(
             timestamp=timestamp,
-            ip_address=source_ip,  # You can change to dest_ip if needed
-            port=dest_port,        # ✅ Correct destination port (e.g., 8880, 8881)
+            ip_address=source_ip,
+            port=dest_port,
             method=method or "",
             path=path or "",
             status=status or 0,
             rule_messages=rule_messages
         )
         log_entries.append(log_entry)
+
+    # Write skipped binary/unparsed entries to a file
+    if skipped_entries:
+        try:
+            os.makedirs(os.path.dirname(UNPARSED_LOG_PATH), exist_ok=True)
+            with open(UNPARSED_LOG_PATH, "ab") as unparsed_file:
+                for entry in skipped_entries:
+                    unparsed_file.write(b"--UNPARSED--\n" + entry + b"\n\n")
+            print(f"⚠️ {len(skipped_entries)} binary/unparsed entries saved to {UNPARSED_LOG_PATH}")
+        except Exception as e:
+            print(f"Failed to write unparsed entries: {e}")
 
     return log_entries
 
@@ -129,7 +150,7 @@ def extract_rule_descriptions_from_log(file_path: str) -> dict:
     """Parse log and return a map of rule_id → msg (clean description)."""
     rule_descriptions = {}
     try:
-        with open(file_path, "r") as f:
+        with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
             content = f.read()
     except Exception as e:
         print(f"Failed to read log for rule descriptions: {e}")
