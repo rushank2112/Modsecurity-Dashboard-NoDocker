@@ -227,6 +227,7 @@ Create a new service file (e.g., `fastapi-dashboard.service`) in the `/etc/syste
 
 ```bash
 sudo nano /etc/systemd/system/fastapi-dashboard.service
+```
 
 **2. Add the Service Configuration:**
 
@@ -255,6 +256,7 @@ SyslogIdentifier=fastapi-dashboard
 
 [Install]
 WantedBy=multi-user.target
+```
 
 *Remember to replace `rushank` with your actual Linux username and `dashboard_env` if you chose a different name for your virtual environment.*
 
@@ -265,6 +267,7 @@ After creating and saving the file, tell systemd to reload its configuration and
 ```bash
 sudo systemctl daemon-reload
 sudo systemctl enable fastapi-dashboard.service
+```
 
 **4. Start the Service Now:**
 
@@ -272,6 +275,7 @@ To start the service immediately without rebooting:
 
 ```bash
 sudo systemctl start fastapi-dashboard.service
+```
 
 **5. Check the Service Status and Logs:**
 
@@ -279,11 +283,13 @@ To verify that your service is running correctly:
 
 ```bash
 sudo systemctl status fastapi-dashboard.service
+```
 
 To view its logs:
 
 ```bash
 sudo journalctl -u fastapi-dashboard.service -f
+```
 
 ## 🔁 Switching to a Different App
 
