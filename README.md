@@ -1,24 +1,20 @@
-# ModSecurity WAF with FastAPI Dashboard – PinewoodStore Example
+# ModSecurity WAF with FastAPI Dashboard – Manual Setup Example
 
-This project demonstrates a **Dockerized deployment of ModSecurity** as a Web Application Firewall (WAF), integrated with a custom **FastAPI-based monitoring dashboard**. The example application used is **PinewoodStore**, but the setup can be adapted to protect **any other web application** by modifying configuration.
+This project demonstrates a **manual deployment of ModSecurity** as a Web Application Firewall (WAF) directly on a Linux host, integrated with a custom **FastAPI-based monitoring dashboard**. The setup can be adapted to protect **any web application** by modifying Apache configuration.
 
 ---
 
 ## 📦 Project Structure
 
 ```
-modsec-docker/
-├── apache-modsec/
-│   ├── apache-config/
-│   │   └── myapp.conf        # Apache virtual host & ModSecurity rules for PinewoodStore
-│   └── Dockerfile            # Builds Apache + ModSecurity container
+Modsecurity-Dashboard-NoDocker/
 ├── dashboard/
-│   ├── main.py               # FastAPI dashboard backend
-│   ├── templates/            # Jinja2 HTML templates for logs and dashboard
-│   └── requirements.txt      # Python dependencies
-├── docker-compose.yml        # Defines WAF and dashboard services
-└── README.md                 # You are here
+│   ├── main.py                 # FastAPI dashboard backend
+│   ├── templates/              # Jinja2 HTML templates for logs and dashboard
+│   └── requirements.txt        # Python dependencies
+└── README.md                   # You are here
 ```
+*(Note: The `apache-modsec/` directory and `docker-compose.yml` from the original project are not used for this manual installation. Apache and ModSecurity are installed and configured directly on your host system.)*
 
 ---
 
