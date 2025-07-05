@@ -1,4 +1,4 @@
-# ModSecurity WAF with FastAPI Dashboard – Manual Setup Example
+# ModSecurity WAF with FastAPI Dashboard – Manual Setup
 
 This project demonstrates a **manual deployment of ModSecurity** as a Web Application Firewall (WAF) directly on a Linux host, integrated with a custom **FastAPI-based monitoring dashboard**. The setup can be adapted to protect **any web application** by modifying Apache configuration.
 
