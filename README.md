@@ -118,9 +118,6 @@ This sets up your Web Application Firewall (WAF).
 
         <IfModule security2_module>
             SecRuleEngine On
-            # Include the main ModSecurity configuration
-            Include /etc/modsecurity/modsecurity.conf
-
             # Include the CRS setup and rules
             IncludeOptional /usr/share/modsecurity-crs/crs-setup.conf
             IncludeOptional /usr/share/modsecurity-crs/rules/*.conf
@@ -131,7 +128,9 @@ This sets up your Web Application Firewall (WAF).
         # For simple testing, you can point this to a basic HTTP server or leave it out if just testing ModSec rules
         ProxyRequests Off
         ProxyPreserveHost On
-        ProxyPass / http://localhost:8081/ # Example: point to a dummy local app or default Apache page
+        
+        # Example: point to a dummy local app or default Apache page
+        ProxyPass / http://localhost:8081/
         ProxyPassReverse / http://localhost:8081/
 
         # If not using ProxyPass, define your DocumentRoot for static content
