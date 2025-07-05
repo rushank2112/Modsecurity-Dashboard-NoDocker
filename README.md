@@ -50,7 +50,7 @@ This sets up your Web Application Firewall (WAF).
 
 1.  **Clone the Repository:**
     ```bash
-    git clone [https://github.com/enochgitgamefied/Modsecurity-Dashboard-NoDocker.git](https://github.com/enochgitgamefied/Modsecurity-Dashboard-NoDocker.git)
+    git clone https://github.com/enochgitgamefied/Modsecurity-Dashboard-NoDocker.git
     cd Modsecurity-Dashboard-NoDocker
     ```
 
